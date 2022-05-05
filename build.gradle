@@ -1,0 +1,52 @@
+plugins {
+    id 'java'
+}
+
+group 'org.example'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.2'
+
+    // https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.0'
+
+    //https://gitlab.inria.fr/moex/alignapi/-/releases
+    implementation files('lib/edoal.jar')
+
+
+
+//    implementation ('org.apache.jena:jena-fuseki-embedded:3.8.0'){
+//        exclude group: 'org.slf4j'
+//        exclude group: 'org.slf4j'
+//
+//    }
+//    implementation ('org.apache.jena:jena-fuseki-server:3.8.0') {
+//        exclude group: 'org.slf4j'
+//    }
+
+    // https://mvnrepository.com/artifact/com.hp.hpl.jena/jena
+    implementation ('com.hp.hpl.jena:jena:2.6.4'){
+        exclude group: 'org.slf4j'
+        exclude group: 'org.slf4j'
+        exclude group: 'log4j'
+
+    }
+
+    // https://mvnrepository.com/artifact/org.apache.jena/jena
+    implementation 'org.apache.jena:jena:4.4.0'
+// https://mvnrepository.com/artifact/org.apache.jena/apache-jena-libs
+    implementation 'org.apache.jena:apache-jena-libs:4.4.0'
+    implementation 'org.slf4j:slf4j-nop:1.7.36'
+
+}
+
+test {
+    useJUnitPlatform()
+}
+
