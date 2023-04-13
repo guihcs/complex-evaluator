@@ -25,15 +25,16 @@ public class Evaluator {
     public static void main(String[] args) throws IOException {
 
 
-        String sourceOnto = "cmt";
+        String sourceOnto = "edas";
         String targetOnto = "conference";
 
-        DatasetManager.getInstance().load(sourceOnto, "/home/guilherme/IdeaProjects/conference-dataset-population-elodie/populated_datasets/data_100/cmt_100.ttl");
-        DatasetManager.getInstance().load(targetOnto, "/home/guilherme/IdeaProjects/conference-dataset-population-elodie/populated_datasets/data_100/conference_100.ttl");
+        DatasetManager.getInstance().load(sourceOnto, "/source_temp.ttl");
+        DatasetManager.getInstance().load(targetOnto, "/target_temp.ttl");
 
-        String resultFolder = "/home/guilherme/IdeaProjects/CanardE/output/cmt_conference";
-        String queriesPath = "/home/guilherme/IdeaProjects/conference-dataset-population-elodie/CQAs";
-        String resultfile = "results";
+        String resultFolder = "out";
+        String queriesPath = "CQAs";
+        String resultfile = "results1";
+
         Files.createDirectories(Paths.get(resultfile + "/CQA_coverage"));
         PrintWriter cvWriter = new PrintWriter(resultfile + "/CQA_coverage/" + sourceOnto + "_" + targetOnto + ".csv", StandardCharsets.UTF_8);
         PrintWriter writer = new PrintWriter(resultfile + "/" + sourceOnto + "_" + targetOnto + ".csv", StandardCharsets.UTF_8);
