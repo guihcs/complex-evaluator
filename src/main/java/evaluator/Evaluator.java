@@ -9,62 +9,73 @@ import org.apache.jena.rdf.model.RDFNode;
 import org.semanticweb.owl.align.Alignment;
 import org.semanticweb.owl.align.AlignmentException;
 import org.semanticweb.owl.align.AlignmentVisitor;
+import sparql.SparqlProxy;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 public class Evaluator {
 
+    /**
+     * @param args args[0] = source ontology name
+     *             args[1] = target ontology name
+     *             args[2] = source ontology path
+     *             args[3] = target ontology path
+     *             args[4] = matcher output folder
+     *             args[5] = CQA folder
+     *             args[6] = result folder
+     */
     public static void main(String[] args) throws IOException {
 
+        System.out.println("Evaluator");
+        String sourceOnto = args[0];
+        String targetOnto = args[1];
 
-        String sourceOnto = "edas";
-        String targetOnto = "conference";
+        DatasetManager.getInstance().load(sourceOnto, args[2]);
+        DatasetManager.getInstance().load(targetOnto, args[3]);
 
-        DatasetManager.getInstance().load(sourceOnto, "/source_temp.ttl");
-        DatasetManager.getInstance().load(targetOnto, "/target_temp.ttl");
+        String resultFolder = args[4];
+        String queriesPath = args[5];
+        String resultFile = args[6];
 
-        String resultFolder = "out";
-        String queriesPath = "CQAs";
-        String resultfile = "results1";
-
-        Files.createDirectories(Paths.get(resultfile + "/CQA_coverage"));
-        PrintWriter cvWriter = new PrintWriter(resultfile + "/CQA_coverage/" + sourceOnto + "_" + targetOnto + ".csv", StandardCharsets.UTF_8);
-        PrintWriter writer = new PrintWriter(resultfile + "/" + sourceOnto + "_" + targetOnto + ".csv", StandardCharsets.UTF_8);
+        Files.createDirectories(Paths.get(resultFile + "/CQA_coverage"));
+        PrintWriter cvWriter = new PrintWriter(resultFile + "/CQA_coverage/" + sourceOnto + "_" + targetOnto + ".csv", StandardCharsets.UTF_8);
+        PrintWriter writer = new PrintWriter(resultFile + "/" + sourceOnto + "_" + targetOnto + ".csv", StandardCharsets.UTF_8);
         AtomicInteger count = new AtomicInteger();
         float[] means = new float[5];
-        try(Stream<Path> walk = Files.walk(Paths.get(resultFolder), 1)){
+        try (Stream<Path> walk = Files.walk(Paths.get(resultFolder), 1)) {
             walk.forEach(fpath -> {
                 if (Files.isDirectory(fpath)) return;
                 AlignmentParser ap = new AlignmentParser();
-                BasicAlignment al = new BasicAlignment();
+                new BasicAlignment();
+                BasicAlignment al;
 
-                ArrayList<HashSet<String>> sourceResults = new ArrayList<>();
-                ArrayList<String> targetQueries = new ArrayList<>();
-                ArrayList<String> sourceQueries;
+                List<Set<String>> sourceResults = new ArrayList<>();
+                List<String> targetQueries = new ArrayList<>();
+                List<String> sourceQueries;
 
                 File alignmentfile = fpath.toFile();
 
                 try {
-                    if (ap.parse(alignmentfile.toURI()) instanceof EDOALAlignment) {
+                    if (ap.parse(alignmentfile.toURI()) instanceof EDOALAlignment edoal) {
                         al = (BasicAlignment) ap.parse(alignmentfile.toURI());
 
                         File inverseAlignmentFile = new File(alignmentfile.getPath().replaceAll(sourceOnto + "-" + targetOnto + ".edoal", targetOnto + "-" + sourceOnto + ".edoal"));
                         ensureInverseAlignmentFile(al, inverseAlignmentFile);
 
-                        System.out.println("Translating alignment into SPARQL queries");
-                        targetQueries = ((EDOALAlignment) al).toTargetSPARQLQuery();
-                        sourceQueries = ((EDOALAlignment) al).toSourceSPARQLQuery();
-
-
-                        System.out.println("Retrieving Source Alignment SPARQL queries results");
+                        sourceQueries = edoal.toSourceSPARQLQuery();
+                        targetQueries = edoal.toTargetSPARQLQuery();
 
                         for (int i = 0; i < targetQueries.size(); i++) {
                             sourceResults.add(getSPARQLQueryResults(sourceOnto, sourceQueries.get(i)));
@@ -85,16 +96,20 @@ public class Evaluator {
 
                 StringBuilder resultCSV = new StringBuilder("cqa,best_q_prec,best_q_fmeasure,best_q_rec\n");
 
-                ArrayList<Double> precisions = new ArrayList<>();
-                ArrayList<Double> recalls = new ArrayList<>();
-                ArrayList<Double> fMeasures = new ArrayList<>();
+                List<Double> precisions = new ArrayList<>();
+                List<Double> recalls = new ArrayList<>();
+                List<Double> fMeasures = new ArrayList<>();
 
-                AtomicReference<ArrayList<String>> rewrittenQueries = new AtomicReference<>(new ArrayList<>());
+                AtomicReference<List<String>> rewrittenQueries = new AtomicReference<>(new ArrayList<>());
                 BasicAlignment finalAl = al;
-                ArrayList<String> finalTargetQueries = targetQueries;
-                try(Stream<Path> files = Files.walk(Paths.get(queriesPath), 1)){
+                List<String> finalTargetQueries = targetQueries;
+                try (Stream<Path> files = Files.walk(Paths.get(queriesPath), 1)) {
                     files.forEach(path -> {
-                        evaluate(sourceOnto, targetOnto, precisions, recalls, fMeasures, sourceResults, rewrittenQueries, resultCSV, finalAl, finalTargetQueries, path);
+                        try {
+                            evaluate(sourceOnto, targetOnto, precisions, recalls, fMeasures, sourceResults, rewrittenQueries, resultCSV, finalAl, finalTargetQueries, path);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
                     });
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -106,8 +121,8 @@ public class Evaluator {
                 String proportionQueries = calcResults(precisions, recalls, fMeasures);
 
 
-                cvWriter.println(fpath.getFileName().toString().split("\\.")[0] + "," + resultCSV);
-                writer.println(fpath.getFileName().toString().split("\\.")[0] + "," +proportionQueries);
+                cvWriter.println(fpath.getFileName().toString() + "," + resultCSV);
+                writer.println(fpath.getFileName().toString() + "," + proportionQueries);
 
                 String[] split = proportionQueries.split(",");
 
@@ -117,7 +132,7 @@ public class Evaluator {
                 count.getAndIncrement();
             });
         }
-
+        writer.println("classical,recall-oriented,precision-oriented,overlap,query f-measure");
         writer.printf("MEAN,CQAs,%f,%f,%f,%f,%f\n", means[0] / count.get(), means[1] / count.get(), means[2] / count.get(), means[3] / count.get(), means[4] / count.get());
         cvWriter.close();
         writer.close();
@@ -127,32 +142,37 @@ public class Evaluator {
     }
 
     private static void ensureInverseAlignmentFile(Alignment al, File inverseAlignmentFile) throws AlignmentException, FileNotFoundException {
-        if (!inverseAlignmentFile.exists()) {
-            Alignment inverseAl = al.inverse();
-            PrintWriter writer = new PrintWriter(inverseAlignmentFile);
-            AlignmentVisitor renderer = new RDFRendererVisitor(writer);
-            inverseAl.render(renderer);
-            writer.flush();
-            writer.close();
+        if (inverseAlignmentFile.exists()) {
+            return;
         }
+        Alignment inverseAl = al.inverse();
+        PrintWriter writer = new PrintWriter(inverseAlignmentFile);
+        AlignmentVisitor renderer = new RDFRendererVisitor(writer);
+        inverseAl.render(renderer);
+        writer.flush();
+        writer.close();
     }
 
-    private static void evaluate(String sourceOnto, String targetOnto, ArrayList<Double> precisions, ArrayList<Double> recalls, ArrayList<Double> fMeasures, ArrayList<HashSet<String>> sourceResults, AtomicReference<ArrayList<String>> rewrittenQueries, StringBuilder resultCSV, BasicAlignment finalAl, ArrayList<String> finalTargetQueries, Path path) {
+    private static void evaluate(String sourceOnto, String targetOnto, List<Double> precisions, List<Double> recalls, List<Double> fMeasures, List<Set<String>> sourceResults, AtomicReference<List<String>> rewrittenQueries, StringBuilder resultCSV, BasicAlignment finalAl, List<String> finalTargetQueries, Path path) throws IOException {
         String cqa = path.getFileName().toString();
         Path sourceCQAFile = Paths.get(path + "/" + sourceOnto + ".sparql");
         Path targetCQAFile = Paths.get(path + "/" + targetOnto + ".sparql");
+
         if (Files.notExists(sourceCQAFile) || Files.notExists(targetCQAFile)) {
             return;
         }
+
         String sourceCQA = getQueryContent(sourceCQAFile);
         String targetCQA = getQueryContent(targetCQAFile);
-        HashSet<String> sourceCQAresults = getSPARQLQueryResults(sourceOnto, sourceCQA);
-        HashSet<String> targetCQAresults = getSPARQLQueryResults(targetOnto, targetCQA);
+        Set<String> sourceCQAresults = getSPARQLQueryResults(sourceOnto, sourceCQA);
+        Set<String> targetCQAresults = getSPARQLQueryResults(targetOnto, targetCQA);
 
-        if (finalAl instanceof EDOALAlignment) {
-            rewrittenQueries.set(((EDOALAlignment) finalAl).rewriteAllPossibilitiesQuery(sourceCQA));
+        if (finalAl instanceof EDOALAlignment edoalAlignment) {
+            rewrittenQueries.set(edoalAlignment.rewriteAllPossibilitiesQuery(sourceCQA));
             for (int j = 0; j < sourceResults.size(); j++) {
-                if (!identical(compareHashSet(sourceResults.get(j), sourceCQAresults))) { continue; }
+                if (!identical(compareSet(sourceResults.get(j), sourceCQAresults))) {
+                    continue;
+                }
                 rewrittenQueries.get().add(finalTargetQueries.get(j));
             }
         } else {
@@ -163,34 +183,78 @@ public class Evaluator {
             }
         }
 
-        ArrayList<Double> bestRes = new ArrayList<>();
+        List<Double> bestRes = new ArrayList<>();
         bestRes.add(0.0);
         bestRes.add(0.0);
-        double bestFmeasure = 0.0;
+        AtomicReference<Double> bestFmeasure = new AtomicReference<>(0.0);
 
-        for (String rewrittenQuery : rewrittenQueries.get()) {
-            HashSet<String> rewrittenResults = getSPARQLQueryResults(targetOnto, rewrittenQuery);
-            ArrayList<Double> rewrittenRes = compareHashSet(targetCQAresults, rewrittenResults);
-            if (fMeasure(rewrittenRes) > bestFmeasure) {
-                bestRes = rewrittenRes;
-                bestFmeasure = fMeasure(rewrittenRes);
+        try(ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            for (String rewrittenQuery : rewrittenQueries.get()) {
+                executor.submit(() -> {
+
+                    Set<String> rewrittenResults = getSPARQLQueryResults(targetOnto, rewrittenQuery);
+                    List<Double> rewrittenRes = compareSet(targetCQAresults, rewrittenResults);
+
+                    if (fMeasure(rewrittenRes) > bestFmeasure.get()) {
+                        bestRes.set(0, rewrittenRes.get(0));
+                        bestRes.set(1, rewrittenRes.get(1));
+                        bestFmeasure.set(fMeasure(rewrittenRes));
+                    }
+                });
             }
         }
 
 
         precisions.add(bestRes.get(0));
         recalls.add(bestRes.get(1));
-        fMeasures.add(bestFmeasure);
-        resultCSV.append(cqa).append(",").append(bestRes.get(0)).append(",").append(bestFmeasure).append(",").append(bestRes.get(1)).append("\n");
+        fMeasures.add(bestFmeasure.get());
+        resultCSV.append(cqa).append(",").append(bestRes.get(0)).append(",").append(bestFmeasure.get()).append(",").append(bestRes.get(1)).append("\n");
     }
 
-    private static String calcResults(ArrayList<Double> precisions, ArrayList<Double> recalls, ArrayList<Double> fMeasures) {
+    public static Set<String> getSPARQLQueryResults(String onto, String query) {
+        Set<String> results = new HashSet<>();
+        int offset = 0;
+        int limit = 10000;
+        boolean end = false;
+        while (!end) {
+            String newQuery = query;
+            newQuery += "\n LIMIT " + limit;
+            newQuery += "\n OFFSET " + offset;
+
+            List<Map<String, RDFNode>> result = SparqlProxy.query(onto, newQuery);
+            Iterator<Map<String, RDFNode>> retIterator = result.iterator();
+            int nbAns = 0;
+            while (retIterator.hasNext()) {
+                nbAns++;
+                Map<String, RDFNode> ans = retIterator.next();
+                if (ans.containsKey("s") && ans.get("s") != null) {
+                    String s = instanceString(ans.get("s").toString());
+                    String o = "";
+                    if (ans.containsKey("o") && ans.get("o") != null) {
+                        o = instanceString(ans.get("o").toString());
+                    }
+                    results.add(s + o);
+                }
+            }
+            if (nbAns < limit) {
+                end = true;
+            } else {
+                offset += limit;
+            }
+            if (offset > 60000) {
+                end = true;
+            }
+        }
+        return results;
+    }
+
+    private static String calcResults(List<Double> precisions, List<Double> recalls, List<Double> fMeasures) {
         double nbEquivCQA = 0;
         double nbMoreGeneralCQA = 0;
         double nbMoreSpecificCQA = 0;
         double nbOverlapCQA = 0;
         for (int i = 0; i < precisions.size(); i++) {
-            ArrayList<Double> result = new ArrayList<>();
+            List<Double> result = new ArrayList<>();
             result.add(precisions.get(i));
             result.add(recalls.get(i));
             if (identical(result)) {
@@ -212,34 +276,34 @@ public class Evaluator {
 
 
     public static boolean sourceMoreGeneralThanTarget(List<Double> results) {
-        return (results.get(0)==1 && results.get(1) > 0) ;
+        return (results.get(0) == 1 && results.get(1) > 0);
     }
 
     public static boolean sourceMoreSpecificThanTarget(List<Double> results) {
-        return 	(results.get(0)> 0 && results.get(1) ==1 ) ;
+        return (results.get(0) > 0 && results.get(1) == 1);
     }
 
 
-    public static ArrayList<Double> compareHashSet(HashSet<String> hsource, HashSet<String> htarget) {
-        ArrayList<Double> results = new ArrayList<>();
+    public static List<Double> compareSet(Set<String> source, Set<String> target) {
+        List<Double> results = new ArrayList<>();
         int correctResults = 0;
-        for (String targRes : htarget) {
-            if (hsource.contains(targRes)) {
+        for (String targRes : target) {
+            if (source.contains(targRes)) {
                 correctResults++;
             }
         }
         double prec = 0;
         double rec = 0;
-        if (hsource.size() > 0 && htarget.size() > 0) {
-            prec = (double) correctResults / (double) htarget.size();
-            rec = (double) correctResults / (double) hsource.size();
+        if (!source.isEmpty() && !target.isEmpty()) {
+            prec = (double) correctResults / (double) target.size();
+            rec = (double) correctResults / (double) source.size();
         }
         results.add(prec);
         results.add(rec);
         return results;
     }
 
-    public static double mean(ArrayList<Double> list) {
+    public static double mean(List<Double> list) {
         double res = 0;
         for (double d : list) {
             res += d;
@@ -247,15 +311,15 @@ public class Evaluator {
         return res / (double) list.size();
     }
 
-    public static boolean identical(ArrayList<Double> results) {
+    public static boolean identical(List<Double> results) {
         return results.get(0) == 1 && results.get(1) == 1;
     }
 
-    public static boolean overlap(ArrayList<Double> results) {
+    public static boolean overlap(List<Double> results) {
         return results.get(0) > 0 && results.get(1) > 0;
     }
 
-    public static double fMeasure(ArrayList<Double> results) {
+    public static double fMeasure(List<Double> results) {
         double prec = results.get(0);
         double rec = results.get(1);
         if (prec == 0 && rec == 0) {
@@ -265,71 +329,28 @@ public class Evaluator {
         }
     }
 
-    public static HashSet<String> getSPARQLQueryResults(String onto, String query) {
-        HashSet<String> results = new HashSet<>();
-        try {
-
-            int offset = 0;
-            int limit = 10000;
-            boolean end = false;
-            while (!end) {
-                String newQuery = query;
-                newQuery += "\n LIMIT " + limit;
-                newQuery += "\n OFFSET " + offset;
-                List<Map<String, RDFNode>> result = sparql.SparqlProxy.query(onto, newQuery);
-                Iterator<Map<String, RDFNode>> retIterator = result.iterator();
-                int nbAns = 0;
-                while (retIterator.hasNext()) {
-                    nbAns++;
-                    Map<String, RDFNode> ans = retIterator.next();
-                    if (ans.containsKey("s")) {
-                        String s = instanceString(ans.get("s").toString());
-                        String o = "";
-                        if (ans.containsKey("o")) {
-                            o = instanceString(ans.get("o").toString());
-                        }
-                        results.add(s + o);
-                    }
-                }
-                if (nbAns < limit) {
-                    end = true;
-                } else {
-                    offset += limit;
-                }
-                if (offset > 60000) {
-                    end = true;
-                }
-            }
 
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(0);
-        }
-        return results;
-    }
-
-    public static String getQueryContent(Path f) {
+    public static String getQueryContent(Path f) throws IOException {
         StringBuilder result = new StringBuilder();
-        try {
-            Scanner sc = new Scanner(Files.newBufferedReader(f));
+        Scanner sc = new Scanner(Files.newBufferedReader(f));
 
-            while (sc.hasNextLine()) {
-                String line = sc.nextLine();
-                result.append(line).append(" ");
-            }
-            sc.close();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        while (sc.hasNextLine()) {
+            String line = sc.nextLine();
+            result.append(line).append(" ");
         }
+        sc.close();
         return result.toString();
     }
 
 
     public static String instanceString(String raw) {
-        return raw.replaceAll("\"", "").replaceAll("http://[^#]+#", "").replaceAll("_v0", "").replaceAll("_v2", "");
+
+        return raw
+                .replaceAll("\"", "")
+                .replaceAll("http://[^#]+#", "")
+                .replaceAll("_v0", "")
+                .replaceAll("_v2", "");
     }
 
 }

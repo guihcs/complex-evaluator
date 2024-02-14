@@ -1,9 +1,11 @@
 plugins {
-    id 'java'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+    id 'application'
 }
-
 group 'org.example'
 version '1.0-SNAPSHOT'
+
+mainClassName = 'evaluator.Evaluator'
 
 repositories {
     mavenCentral()
@@ -11,6 +13,7 @@ repositories {
 
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.8.1'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.2'
 
     // https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind
@@ -18,17 +21,11 @@ dependencies {
 
     //https://gitlab.inria.fr/moex/alignapi/-/releases
     implementation files('lib/edoal.jar')
+//    implementation files('lib/align.jar')
+//    implementation files('lib/alignsvc.jar')
+//    implementation files('lib/ontowrap.jar')
+//    implementation files('lib/procalign.jar')
 
-
-
-//    implementation ('org.apache.jena:jena-fuseki-embedded:3.8.0'){
-//        exclude group: 'org.slf4j'
-//        exclude group: 'org.slf4j'
-//
-//    }
-//    implementation ('org.apache.jena:jena-fuseki-server:3.8.0') {
-//        exclude group: 'org.slf4j'
-//    }
 
     // https://mvnrepository.com/artifact/com.hp.hpl.jena/jena
     implementation ('com.hp.hpl.jena:jena:2.6.4'){
@@ -39,9 +36,9 @@ dependencies {
     }
 
     // https://mvnrepository.com/artifact/org.apache.jena/jena
-    implementation 'org.apache.jena:jena:4.4.0'
+    implementation 'org.apache.jena:jena:4.10.0'
 // https://mvnrepository.com/artifact/org.apache.jena/apache-jena-libs
-    implementation 'org.apache.jena:apache-jena-libs:4.4.0'
+    implementation 'org.apache.jena:apache-jena-libs:4.10.0'
     implementation 'org.slf4j:slf4j-nop:1.7.36'
 
 }
@@ -50,3 +47,12 @@ test {
     useJUnitPlatform()
 }
 
+
+application {
+    mainClass = 'evaluator.Evaluator'
+}
+
+
+shadowJar {
+    mergeServiceFiles()
+}
