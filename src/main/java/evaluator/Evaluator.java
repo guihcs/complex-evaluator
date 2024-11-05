@@ -37,7 +37,6 @@ public class Evaluator {
      *             args[6] = result folder
      */
     public static void main(String[] args) throws IOException {
-
         System.out.println("Evaluator");
         String sourceOnto = args[0];
         String targetOnto = args[1];
@@ -74,12 +73,11 @@ public class Evaluator {
                         File inverseAlignmentFile = new File(alignmentfile.getPath().replaceAll(sourceOnto + "-" + targetOnto + ".edoal", targetOnto + "-" + sourceOnto + ".edoal"));
                         ensureInverseAlignmentFile(al, inverseAlignmentFile);
 
-                        sourceQueries = edoal.toSourceSPARQLQuery();
-                        targetQueries = edoal.toTargetSPARQLQuery();
+                        sourceQueries = edoal.toSourceSPARQLQuery().stream().filter(s -> s.length() > 16).toList();
+                        targetQueries = edoal.toTargetSPARQLQuery().stream().filter(s -> s.length() > 16).toList();
 
-                        for (int i = 0; i < targetQueries.size(); i++) {
+                        for (int i = 0; i < sourceQueries.size(); i++) {
                             sourceResults.add(getSPARQLQueryResults(sourceOnto, sourceQueries.get(i)));
-
                         }
 
                     } else {
@@ -132,6 +130,7 @@ public class Evaluator {
                 count.getAndIncrement();
             });
         }
+
         writer.println("classical,recall-oriented,precision-oriented,overlap,query f-measure");
         writer.printf("MEAN,CQAs,%f,%f,%f,%f,%f\n", means[0] / count.get(), means[1] / count.get(), means[2] / count.get(), means[3] / count.get(), means[4] / count.get());
         cvWriter.close();
@@ -158,14 +157,18 @@ public class Evaluator {
         Path sourceCQAFile = Paths.get(path + "/" + sourceOnto + ".sparql");
         Path targetCQAFile = Paths.get(path + "/" + targetOnto + ".sparql");
 
+
         if (Files.notExists(sourceCQAFile) || Files.notExists(targetCQAFile)) {
             return;
         }
+
 
         String sourceCQA = getQueryContent(sourceCQAFile);
         String targetCQA = getQueryContent(targetCQAFile);
         Set<String> sourceCQAresults = getSPARQLQueryResults(sourceOnto, sourceCQA);
         Set<String> targetCQAresults = getSPARQLQueryResults(targetOnto, targetCQA);
+
+
 
         if (finalAl instanceof EDOALAlignment edoalAlignment) {
             rewrittenQueries.set(edoalAlignment.rewriteAllPossibilitiesQuery(sourceCQA));
@@ -212,12 +215,18 @@ public class Evaluator {
     }
 
     public static Set<String> getSPARQLQueryResults(String onto, String query) {
+
+
         Set<String> results = new HashSet<>();
         int offset = 0;
         int limit = 10000;
         boolean end = false;
         while (!end) {
             String newQuery = query;
+
+
+
+
             newQuery += "\n LIMIT " + limit;
             newQuery += "\n OFFSET " + offset;
 
@@ -227,6 +236,7 @@ public class Evaluator {
             while (retIterator.hasNext()) {
                 nbAns++;
                 Map<String, RDFNode> ans = retIterator.next();
+
                 if (ans.containsKey("s") && ans.get("s") != null) {
                     String s = instanceString(ans.get("s").toString());
                     String o = "";
@@ -245,6 +255,7 @@ public class Evaluator {
                 end = true;
             }
         }
+
         return results;
     }
 

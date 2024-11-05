@@ -114,9 +114,17 @@ public class Precision {
 
                 List<Set<String>> sourceResults = new ArrayList<>();
                 List<Set<String>> targetResults = new ArrayList<>();
-                for (int i = 0; i < targetQueries.get().size(); i++) {
-                    sourceResults.add(Evaluator.getSPARQLQueryResults(sourceOnto, sourceQueries.get().get(i)));
-                    targetResults.add(Evaluator.getSPARQLQueryResults(targetOnto, targetQueries.get().get(i)));
+
+                List<String> sq = sourceQueries.get().stream().filter(s -> s.length() > 16).toList();
+                List<String> tq = targetQueries.get().stream().filter(s -> s.length() > 16).toList();
+
+
+                for (int i = 0; i < sourceQueries.get().size(); i++) {
+                    if (i >= sq.size() || i >= tq.size()) {
+                        break;
+                    }
+                    sourceResults.add(Evaluator.getSPARQLQueryResults(sourceOnto, sq.get(i)));
+                    targetResults.add(Evaluator.getSPARQLQueryResults(targetOnto, tq.get(i)));
                     List<Double> comp = Evaluator.compareSet(sourceResults.get(i), targetResults.get(i));
 
                     fmeasures.add(Evaluator.fMeasure(comp));

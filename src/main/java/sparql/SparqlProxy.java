@@ -15,8 +15,10 @@ import java.util.Map;
 public class SparqlProxy {
 
     public static List<Map<String, RDFNode>> query(String dataset, String query) {
-        List<Map<String, RDFNode>> result = new ArrayList<>();
 
+
+
+        List<Map<String, RDFNode>> result = new ArrayList<>();
         try (QueryExecution queryExecution = QueryExecution.create(query, DatasetManager.getInstance().get(dataset))) {
             ResultSet resultSet = queryExecution.execSelect();
             resultSet.forEachRemaining(querySolution -> {
